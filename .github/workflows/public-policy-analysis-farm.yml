@@ -1,0 +1,86 @@
+name: CEREBRON Farm 24 Public Policy Analysis
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {role: POLICY_SYSTEMS_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: PUBLIC_FINANCE_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: COST_BENEFIT_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: DISTRIBUTIONAL_IMPACT_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: PROGRAM_EVALUATION_SPECIALIST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: CAUSAL_INFERENCE_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: IMPLEMENTATION_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: INSTITUTIONAL_CAPACITY_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: REGULATORY_IMPACT_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: PUBLIC_SERVICE_DELIVERY_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: SOCIAL_POLICY_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: INFRASTRUCTURE_POLICY_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: ENVIRONMENT_POLICY_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: TECHNOLOGY_POLICY_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: POLICY_DATA_AUDITOR, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: ASSUMPTION_UNCERTAINTY_AUDITOR, model: huggingface-projects/gemma-2-9b-it}
+          - {role: COUNTERARGUMENT_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: RED_TEAM_POLICY_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: INDEPENDENT_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: OMEGA_POLICY_SYNTHESIZER, model: huggingface-projects/gemma-2-9b-it}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install gradio_client
+      - name: Run role
+        env:
+          ROLE: ${{ matrix.role }}
+          MODEL: ${{ matrix.model }}
+        run: python worker/agent.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.role }}
+          path: results/${{ matrix.role }}.json
+
+  omega:
+    if: always()
+    needs: agents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: agent-*
+          path: all-results
+          merge-multiple: true
+      - name: Fuse evidence ledger
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          rows=[]
+          for p in pathlib.Path('all-results').glob('*.json'):
+              try: rows.append(json.loads(p.read_text()))
+              except Exception: pass
+          successful=sum(bool(x.get('success')) for x in rows)
+          models=sorted(set(x.get('model') for x in rows if x.get('model')))
+          out={
+              'roles_received':len(rows),
+              'successful_external_ai_calls':successful,
+              'model_families':models,
+              'political_mode':'NEUTRAL_INFORMATION_ONLY',
+              'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT'
+          }
+          pathlib.Path('omega').mkdir(exist_ok=True)
+          pathlib.Path('omega/summary.json').write_text(json.dumps(out,indent=2))
+          pathlib.Path('omega/results.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2))
+          print(json.dumps(out))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-policy-analysis-omega-packet
+          path: omega/
