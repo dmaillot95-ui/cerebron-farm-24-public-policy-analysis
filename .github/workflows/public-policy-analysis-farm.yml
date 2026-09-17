@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install gradio_client
+      - run: pip install -q hf-gradio
       - name: Run role
         env:
           ROLE: ${{ matrix.role }}
@@ -66,21 +66,13 @@ jobs:
           for p in pathlib.Path('all-results').glob('*.json'):
               try: rows.append(json.loads(p.read_text()))
               except Exception: pass
-          successful=sum(bool(x.get('success')) for x in rows)
-          models=sorted(set(x.get('model') for x in rows if x.get('model')))
-          out={
-              'roles_received':len(rows),
-              'successful_external_ai_calls':successful,
-              'model_families':models,
-              'political_mode':'NEUTRAL_INFORMATION_ONLY',
-              'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT'
-          }
+          successful=sum(bool(x.get('inference_success')) for x in rows)
+          out={'roles_received':len(rows),'successful_external_ai_calls':successful,'failed_external_ai_calls':len(rows)-successful,'model_families':sorted(set(x.get('model') for x in rows if x.get('model'))),'political_mode':'NEUTRAL_INFORMATION_ONLY','status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT','results':rows}
           pathlib.Path('omega').mkdir(exist_ok=True)
-          pathlib.Path('omega/summary.json').write_text(json.dumps(out,indent=2))
-          pathlib.Path('omega/results.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2))
-          print(json.dumps(out))
+          pathlib.Path('omega/packet.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
+          print(json.dumps({k:out[k] for k in ('roles_received','successful_external_ai_calls','failed_external_ai_calls','model_families','status')}))
           PY
       - uses: actions/upload-artifact@v4
         with:
           name: public-policy-analysis-omega-packet
-          path: omega/
+          path: omega/packet.json
